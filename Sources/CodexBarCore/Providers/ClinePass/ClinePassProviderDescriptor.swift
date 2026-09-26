@@ -22,5 +22,5 @@ public enum ClinePassProviderDescriptor {
             subtitle: "Stored in ~/.codexbar/config.json. Paste a ClinePass API key.",
             placeholder: "ClinePass API key..."),
         showsAPIDetail: true,
-        requiresCredentialForAvailability: true)
+        availability: .configuredKey)
 }
