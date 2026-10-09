@@ -6,7 +6,7 @@ import Foundation
 /// `/api/usage-summary`. Missing or failed responses must not fail Cursor usage.
 public struct CursorSandUsageStatus: Decodable, Sendable, Equatable {
     public static let extraWindowID = "cursor-grok-bot"
-    public static let extraWindowTitle = "Grok Bot"
+    public static let extraWindowTitle = "Grok"
     public static let endpointPath = "/api/dashboard/get-sand-usage-status"
 
     public let currentPeriodStart: String?

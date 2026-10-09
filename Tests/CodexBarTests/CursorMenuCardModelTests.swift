@@ -276,7 +276,7 @@ struct CursorMenuCardModelTests {
             hidePersonalInfo: false,
             now: now))
 
-        #expect(model.metrics.map(\.title) == ["Total", "Cursor", "Third Party", "Grok Bot"])
+        #expect(model.metrics.map(\.title) == ["Total", "Cursor", "Third Party", "Grok"])
         #expect(model.metrics.last?.percentLabel == "0% left")
         #expect(model.metrics.last?.detailLeftText == nil)
         #expect(model.metrics.last?.detailRightText == nil)
@@ -351,9 +351,9 @@ struct CursorMenuCardModelTests {
         #expect(metrics["Total"]?.detailLeftText == "On pace")
         #expect(metrics["Cursor"]?.detailLeftText == (cursorUsedPercent == 3 ? "On pace" : "23% in deficit"))
         #expect(metrics["Third Party"]?.detailLeftText == "11% in deficit")
-        #expect(metrics["Grok Bot"]?.detailLeftText == "35% in reserve")
-        #expect(metrics["Grok Bot"]?.detailRightText == "Lasts until reset")
-        #expect(metrics["Grok Bot"]?.pacePercent != nil)
+        #expect(metrics["Grok"]?.detailLeftText == "35% in reserve")
+        #expect(metrics["Grok"]?.detailRightText == "Lasts until reset")
+        #expect(metrics["Grok"]?.pacePercent != nil)
     }
 
     @Test
@@ -405,7 +405,7 @@ struct CursorMenuCardModelTests {
             hidePersonalInfo: false,
             now: now))
 
-        let grok = try #require(model.metrics.first(where: { $0.title == "Grok Bot" }))
+        let grok = try #require(model.metrics.first(where: { $0.title == "Grok" }))
         #expect(grok.detailLeftText == nil)
         #expect(grok.detailRightText == nil)
         #expect(grok.pacePercent == nil)

@@ -23,7 +23,7 @@ struct CursorSandUsageTests {
         #expect(status.includedLimitZero == false)
         let window = try #require(status.extraRateWindow(resetDescription: { _ in "Resets" }))
         #expect(window.id == CursorSandUsageStatus.extraWindowID)
-        #expect(window.title == "Grok Bot")
+        #expect(window.title == "Grok")
         #expect(window.window.usedPercent == 100)
         #expect(window.window.windowMinutes == 10080)
         #expect(window.window.resetsAt != nil)
@@ -111,7 +111,7 @@ struct CursorSandUsageTests {
 
         let usageSnapshot = snapshot.toUsageSnapshot(now: Self.now)
         let grokBot = usageSnapshot.extraRateWindows?.first { $0.id == CursorSandUsageStatus.extraWindowID }
-        #expect(grokBot?.title == "Grok Bot")
+        #expect(grokBot?.title == "Grok")
         #expect(grokBot?.window.usedPercent == 100)
         #expect(grokBot?.window.windowMinutes == 10080)
         #expect(grokBot?.window.resetsAt != nil)

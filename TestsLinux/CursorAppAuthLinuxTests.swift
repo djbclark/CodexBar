@@ -90,7 +90,7 @@ struct CursorAppAuthLinuxTests {
         #expect(snapshot.primary?.usedPercent == 30)
         let bot = try #require(snapshot.extraRateWindows?.first)
         #expect(bot.id == "cursor-grok-bot")
-        #expect(bot.title == "Grok Bot")
+        #expect(bot.title == "Grok")
         #expect(bot.window.usedPercent == 42)
         #expect(bot.window.windowMinutes == 10080)
         #expect(bot.window.resetsAt != nil)
