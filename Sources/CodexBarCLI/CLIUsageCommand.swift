@@ -80,41 +80,48 @@ extension CodexBarCLI {
         var payload: [ProviderPayload] = []
         var exitCode: ExitCode = .success
 
-        for p in providerList {
-            let status = setup.includeStatus ? await Self.fetchStatus(for: p) : nil
-            if appAutoVerifier {
-                // Background app Auto intentionally launches the opaque Claude owner CLI only after a successful
-                // user-initiated fetch has established this process's account-scoped availability marker. Recreate
-                // that real app lifecycle before exercising the background route; discard the foreground payload.
-                var establishmentCommand = command
-                establishmentCommand.sourceModeOverride = .cli
-                let establishment = await ProviderInteractionContext.$current.withValue(.userInitiated) {
-                    await Self.fetchUsageOutputs(
-                        provider: p,
-                        status: status,
-                        tokenContext: tokenContext,
-                        command: establishmentCommand)
-                }
-                if establishment.exitCode != .success {
-                    exitCode = establishment.exitCode
-                    sections.append(contentsOf: establishment.sections)
-                    payload.append(contentsOf: establishment.payload)
-                    continue
-                }
-            }
-            // CLI usage should not clear Keychain cooldowns or attempt interactive Keychain prompts.
-            let output = await ProviderInteractionContext.$current.withValue(.background) {
-                await Self.fetchUsageOutputs(
+        if providerList.count <= 1 {
+            for p in providerList {
+                let providerOutput = await Self.fetchSingleProviderUsageOutput(
                     provider: p,
-                    status: status,
+                    includeStatus: setup.includeStatus,
+                    appAutoVerifier: appAutoVerifier,
                     tokenContext: tokenContext,
                     command: command)
+                if providerOutput.exitCode != .success {
+                    exitCode = providerOutput.exitCode
+                }
+                sections.append(contentsOf: providerOutput.sections)
+                payload.append(contentsOf: providerOutput.payload)
             }
-            if output.exitCode != .success {
-                exitCode = output.exitCode
+        } else {
+            let includeStatus = setup.includeStatus
+            let indexedOutputs = await withTaskGroup(of: (Int, UsageCommandOutput).self) { group in
+                for (index, p) in providerList.enumerated() {
+                    group.addTask {
+                        let providerOutput = await Self.fetchSingleProviderUsageOutput(
+                            provider: p,
+                            includeStatus: includeStatus,
+                            appAutoVerifier: appAutoVerifier,
+                            tokenContext: tokenContext,
+                            command: command)
+                        return (index, providerOutput)
+                    }
+                }
+                var collected: [(Int, UsageCommandOutput)] = []
+                for await item in group {
+                    collected.append(item)
+                }
+                return collected
             }
-            sections.append(contentsOf: output.sections)
-            payload.append(contentsOf: output.payload)
+
+            for (_, providerOutput) in indexedOutputs.sorted(by: { $0.0 < $1.0 }) {
+                if providerOutput.exitCode != .success {
+                    exitCode = providerOutput.exitCode
+                }
+                sections.append(contentsOf: providerOutput.sections)
+                payload.append(contentsOf: providerOutput.payload)
+            }
         }
 
         Self.printUsageOutput(
@@ -125,6 +132,41 @@ extension CodexBarCLI {
             pretty: output.pretty)
 
         Self.exit(code: exitCode, output: output, kind: exitCode == .success ? .runtime : .provider)
+    }
+
+    private static func fetchSingleProviderUsageOutput(
+        provider: UsageProvider,
+        includeStatus: Bool,
+        appAutoVerifier: Bool,
+        tokenContext: TokenAccountCLIContext,
+        command: UsageCommandContext) async -> UsageCommandOutput
+    {
+        let status = includeStatus ? await Self.fetchStatus(for: provider) : nil
+        if appAutoVerifier {
+            // Background app Auto intentionally launches the opaque Claude owner CLI only after a successful
+            // user-initiated fetch has established this process's account-scoped availability marker. Recreate
+            // that real app lifecycle before exercising the background route; discard the foreground payload.
+            var establishmentCommand = command
+            establishmentCommand.sourceModeOverride = .cli
+            let establishment = await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                await Self.fetchUsageOutputs(
+                    provider: provider,
+                    status: status,
+                    tokenContext: tokenContext,
+                    command: establishmentCommand)
+            }
+            if establishment.exitCode != .success {
+                return establishment
+            }
+        }
+        // CLI usage should not clear Keychain cooldowns or attempt interactive Keychain prompts.
+        return await ProviderInteractionContext.$current.withValue(.background) {
+            await Self.fetchUsageOutputs(
+                provider: provider,
+                status: status,
+                tokenContext: tokenContext,
+                command: command)
+        }
     }
 
     /// TOON piggybacks on the JSON fetch/render pipeline (same data, denser rendering at print time)
