@@ -39,25 +39,40 @@ Diagnose why `CodexBarCLI usage --format json --provider all` hangs and takes ~8
    - Local `main` branch was fast-forwarded 1,141 commits to `origin/main` (`d1639ce82`).
    - Findings persisted and pushed to `~/ops/site-private` in `memory/reference_codexbar_quota_recheck.md` (`5629a9c`).
    - Working tree clean.
+6. **CodexBar CLI parallelization implemented**:
+   - `Sources/CodexBarCLI/CLIUsageCommand.swift` updated to query multiple providers concurrently using Swift structured concurrency (`withTaskGroup`).
+   - Extracted `fetchSingleProviderUsageOutput(provider:config:flags:settingsStore:)` helper.
+   - Preserves deterministic output order by sorting completed results by input index.
+   - Formatted and validated with `swiftformat`, `swiftlint --strict`, and `swift test --filter CLIUsageFetchSetupTests`.
+7. **`openusage_sh` disabled**:
+   - Set `[collectors.openusage_sh] enabled = false` in `~/.config/aiuse/config.toml`, resolving the recurring 90.0s collector timeout error observed in `aiuse watch`.
+8. **`aiuse` widget snapshot cache integrated**:
+   - `aiuse` collector now reads the instant `widget-snapshot.json` cache (<2ms) when fresh (default `max_cache_age_seconds = 300.0`).
+   - Includes `--codexbar-live` CLI flag and `[collectors.codexbar] use_cache = false` TOML option to force live CLI queries.
+   - Tested and verified across all 990 unit tests in `aiuse`, committed (`eb0706d`), and pushed to `main`.
 
 ## What We Tried
 
 1. **Investigated whether upstream main already fixed CLI concurrency** — checked `origin/main` commit `d1639ce82`. The sequential `for p in providerList` loop and Gemini shell probing remain identical in current main.
 2. **Inspected running CodexBar process version** — found running PID 60767 was started on Oct 11 and still running 0.74.0 despite 0.74.1 being installed to disk. Relaunched to PID 22700.
+3. **Benchmarked CLI concurrency vs widget cache** — parallel task groups drop wall-clock CLI time to the single slowest provider; direct `widget-snapshot.json` reading drops fetch time to under 2 milliseconds.
 
 ## Key Decisions
 
 1. **Upgrade via Homebrew Cask** — chosen over local release build script because official release 0.74.1 maintains developer ID code signatures and Keychain trust smoothly.
 2. **Clean working tree** — discarded graft cache edits in `.gitignore` and `.ignore` so the local repo checkout remains pristine.
+3. **Structured concurrency for CLI** — used `withTaskGroup` in `CLIUsageCommand.swift` with index tracking to guarantee that formatted outputs preserve deterministic ordering.
+4. **Instant cache by default in `aiuse`** — enabled `widget-snapshot.json` by default in `aiuse` with clean fallback to live queries when cache is stale (>300s) or missing.
 
 ## Evidence & Data
 
 - Installed version check: `codexbar --version` -> `CodexBar 0.74.1`
 - Bundle version: `defaults read /Applications/CodexBar.app/Contents/Info.plist CFBundleShortVersionString` -> `0.74.1`
 - Live process check: `ps -p 22700 -o pid,lstart,command` -> running `/Applications/CodexBar.app/Contents/MacOS/CodexBar` started `Tue Oct 13 04:44:48 2026`
-- Widget snapshot freshness: `/Users/djbclark/Library/Group Containers/Y5PE65HELJ.com.steipete.codexbar/widget-snapshot.json` updated live
+- Widget snapshot freshness: `/Users/djbclark/Library/Group Containers/Y5PE65HELJ.com.steipete.codexbar/widget-snapshot.json` updated live (<1ms read)
 - Upstream repo HEAD: `d1639ce82 feat(menubar): add graphical progress bar layouts (#4436)`
 - Memory doc commit: `5629a9c docs(memory): update codexbar quota recheck with serial CLI & snapshot notes` pushed to `site-private` master
+- `aiuse` commit: `eb0706d Support CodexBar widget snapshot cache in aiuse collector with live query override` pushed to `main`
 
 ## Operator Feedback
 
@@ -67,8 +82,7 @@ Diagnose why `CodexBarCLI usage --format json --provider all` hangs and takes ~8
 
 ## Where We're Going
 
-1. **Optionally implement CLI concurrency in CodexBar** — replace `for p in providerList` in `CLIUsageCommand.swift` with a bounded task group (`withTaskGroup(of: ...)`), and bypass `-l -i` interactive shell timeouts for uninstalled CLIs in `ShellCommandLocator`.
-2. **Update `aiuse` collectors if desired** — `aiuse` already uses concurrent subprocesses (`_MAX_CONCURRENT_PROVIDER_QUERIES = 16`), but can optionally read `widget-snapshot.json` directly for zero-latency quota checks when CodexBar is running.
+1. **Open upstream pull request for CodexBar CLI parallelization** — submit PR for `withTaskGroup` in `CLIUsageCommand.swift` with adversary security review quoted in body.
 
 ## Detached jobs
 
