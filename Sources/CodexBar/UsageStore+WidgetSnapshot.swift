@@ -598,7 +598,11 @@ extension UsageStore {
             WidgetSnapshot.WidgetUsageRowSnapshot(
                 id: namedWindow.id,
                 title: namedWindow.title,
-                percentLeft: namedWindow.usageKnown ? namedWindow.window.remainingPercent : nil)
+                percentLeft: namedWindow.usageKnown ? namedWindow.window.remainingPercent : nil,
+                // Only a measured lane may carry its window: the widget prefers
+                // `window.remainingPercent`, and an unknown bucket is built with
+                // `usedPercent: 0`, which would render as an invented 100% left.
+                window: namedWindow.usageKnown ? namedWindow.window : nil)
         }
     }
 
