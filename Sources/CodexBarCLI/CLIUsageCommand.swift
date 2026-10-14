@@ -76,62 +76,63 @@ extension CodexBarCLI {
         let command = setup.command
         let tokenContext = setup.tokenContext(config: config, output: output)
         let appAutoVerifier = command.providerRuntime == .app
-        var sections: [String] = []
-        var payload: [ProviderPayload] = []
-        var exitCode: ExitCode = .success
-
-        if providerList.count <= 1 {
-            for p in providerList {
-                let providerOutput = await Self.fetchSingleProviderUsageOutput(
-                    provider: p,
-                    includeStatus: setup.includeStatus,
-                    appAutoVerifier: appAutoVerifier,
-                    tokenContext: tokenContext,
-                    command: command)
-                if providerOutput.exitCode != .success {
-                    exitCode = providerOutput.exitCode
-                }
-                sections.append(contentsOf: providerOutput.sections)
-                payload.append(contentsOf: providerOutput.payload)
-            }
-        } else {
-            let includeStatus = setup.includeStatus
-            let indexedOutputs = await withTaskGroup(of: (Int, UsageCommandOutput).self) { group in
-                for (index, p) in providerList.enumerated() {
-                    group.addTask {
-                        let providerOutput = await Self.fetchSingleProviderUsageOutput(
-                            provider: p,
-                            includeStatus: includeStatus,
-                            appAutoVerifier: appAutoVerifier,
-                            tokenContext: tokenContext,
-                            command: command)
-                        return (index, providerOutput)
-                    }
-                }
-                var collected: [(Int, UsageCommandOutput)] = []
-                for await item in group {
-                    collected.append(item)
-                }
-                return collected
-            }
-
-            for (_, providerOutput) in indexedOutputs.sorted(by: { $0.0 < $1.0 }) {
-                if providerOutput.exitCode != .success {
-                    exitCode = providerOutput.exitCode
-                }
-                sections.append(contentsOf: providerOutput.sections)
-                payload.append(contentsOf: providerOutput.payload)
-            }
+        let includeStatus = setup.includeStatus
+        let result = await Self.collectUsageOutputs(providers: providerList) { provider in
+            await Self.fetchSingleProviderUsageOutput(
+                provider: provider,
+                includeStatus: includeStatus,
+                appAutoVerifier: appAutoVerifier,
+                tokenContext: tokenContext,
+                command: command)
         }
 
         Self.printUsageOutput(
             format: command.format,
             toonRequested: output.toonRequested,
-            sections: sections,
-            payload: payload,
+            sections: result.sections,
+            payload: result.payload,
             pretty: output.pretty)
 
-        Self.exit(code: exitCode, output: output, kind: exitCode == .success ? .runtime : .provider)
+        Self.exit(code: result.exitCode, output: output, kind: result.exitCode == .success ? .runtime : .provider)
+    }
+
+    /// Bound provider I/O while preserving the sequential command's output and failure precedence.
+    static func collectUsageOutputs(
+        providers: [UsageProvider],
+        fetch: @escaping @Sendable (UsageProvider) async -> UsageCommandOutput) async -> UsageCommandOutput
+    {
+        await withTaskGroup(of: (Int, UsageCommandOutput, String).self) { group in
+            func enqueue(_ index: Int) {
+                group.addTask {
+                    let diagnostics = CLIStderrBuffer()
+                    let output = await Self.$stderrBuffer.withValue(diagnostics) {
+                        // CLI fetching must not clear Keychain cooldowns or authorize prompts.
+                        await ProviderInteractionContext.$current.withValue(.background) {
+                            await fetch(providers[index])
+                        }
+                    }
+                    return (index, output, diagnostics.contents)
+                }
+            }
+            var next = min(providers.count, 3)
+            for index in 0..<next {
+                enqueue(index)
+            }
+            var results: [(Int, UsageCommandOutput, String)] = []
+            for await result in group {
+                results.append(result)
+                if next < providers.count {
+                    enqueue(next)
+                    next += 1
+                }
+            }
+            var output = UsageCommandOutput()
+            for (_, result, diagnostics) in results.sorted(by: { $0.0 < $1.0 }) {
+                Self.writeStderr(diagnostics)
+                output.merge(result)
+            }
+            return output
+        }
     }
 
     private static func fetchSingleProviderUsageOutput(
@@ -159,14 +160,11 @@ extension CodexBarCLI {
                 return establishment
             }
         }
-        // CLI usage should not clear Keychain cooldowns or attempt interactive Keychain prompts.
-        return await ProviderInteractionContext.$current.withValue(.background) {
-            await Self.fetchUsageOutputs(
-                provider: provider,
-                status: status,
-                tokenContext: tokenContext,
-                command: command)
-        }
+        return await Self.fetchUsageOutputs(
+            provider: provider,
+            status: status,
+            tokenContext: tokenContext,
+            command: command)
     }
 
     /// TOON piggybacks on the JSON fetch/render pipeline (same data, denser rendering at print time)
