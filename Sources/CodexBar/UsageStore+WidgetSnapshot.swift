@@ -580,13 +580,10 @@ extension UsageStore {
         snapshot: UsageSnapshot) -> [WidgetSnapshot.WidgetUsageRowSnapshot]?
     {
         let windows = snapshot.extraRateWindows ?? []
+        // Match the menu card and drop model families the account never touches.
+        let idleIDs = AntigravityQuotaFamilyVisibility.idleWindowIDs(in: snapshot)
         var visible = windows.filter {
-            $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix)
-        }
-        if !visible.isEmpty {
-            // Match the menu card and drop model families the account never touches.
-            let idleIDs = AntigravityQuotaFamilyVisibility.idleWindowIDs(in: snapshot)
-            visible.removeAll { idleIDs.contains($0.id) }
+            $0.id.hasPrefix(Self.antigravityQuotaSummaryWindowIDPrefix) && !idleIDs.contains($0.id)
         }
         if visible.isEmpty, snapshot.primary == nil, snapshot.secondary == nil {
             visible = windows.filter {
@@ -599,9 +596,7 @@ extension UsageStore {
                 id: namedWindow.id,
                 title: namedWindow.title,
                 percentLeft: namedWindow.usageKnown ? namedWindow.window.remainingPercent : nil,
-                // Only a measured lane may carry its window: the widget prefers
-                // `window.remainingPercent`, and an unknown bucket is built with
-                // `usedPercent: 0`, which would render as an invented 100% left.
+                // Unknown buckets have placeholder capacity; only measured windows may supply it.
                 window: namedWindow.usageKnown ? namedWindow.window : nil)
         }
     }
