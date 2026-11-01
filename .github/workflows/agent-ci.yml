@@ -9,6 +9,10 @@ on:
     branches: ['ci/run/**']
   workflow_dispatch:
 
+concurrency:
+  group: agent-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -18,11 +22,12 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select Xcode 27
         run: |
-          ls -d /Applications/Xcode*.app || true
-          x=$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)
+          xs=(/Applications/Xcode_27*.app)
+          printf '%s\n' /Applications/Xcode*.app
+          x=$(printf '%s\n' "${xs[@]}" | sort -V | tail -1)
           sudo xcode-select -s "$x/Contents/Developer"
           xcodebuild -version
           swift --version
@@ -32,7 +37,7 @@ jobs:
         run: ./Scripts/package_app.sh release
       - name: Zip the app
         run: ditto -c -k --keepParent CodexBar.app CodexBar.app.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: CodexBar-app-${{ github.sha }}
           path: CodexBar.app.zip
