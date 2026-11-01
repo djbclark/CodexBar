@@ -1,0 +1,44 @@
+name: Agent CI (macOS app build)
+
+# Overlay-only on ci/base of djbclark/CodexBar (2026-11-01, djbclark: build CodexBar on GitHub CI, never on
+# the Mac). `scripts/github-ci-run` (djbclark-ade) overlays this file onto a commit and pushes ci/run/**.
+# Builds CodexBar.app ad-hoc signed with Scripts/package_app.sh and uploads it as an artifact.
+
+on:
+  push:
+    branches: ['ci/run/**']
+  workflow_dispatch:
+
+concurrency:
+  group: agent-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-app:
+    name: build CodexBar.app (macOS, Xcode 27)
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode 27
+        run: |
+          xs=(/Applications/Xcode_27*.app)
+          printf '%s\n' /Applications/Xcode*.app
+          x=$(printf '%s\n' "${xs[@]}" | sort -V | tail -1)
+          sudo xcode-select -s "$x/Contents/Developer"
+          xcodebuild -version
+          swift --version
+      - name: Build CodexBar.app (release, ad-hoc signed)
+        env:
+          CODEXBAR_SIGNING: adhoc
+        run: ./Scripts/package_app.sh release
+      - name: Zip the app
+        run: ditto -c -k --keepParent CodexBar.app CodexBar.app.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CodexBar-app-${{ github.sha }}
+          path: CodexBar.app.zip
+          retention-days: 14
