@@ -120,4 +120,21 @@ read_when:
   implementation retains FIFO ownership and the CLI cleanup path's explicit cancellation exception. CLI usage and
   cards validate account/provider selection through `TokenAccountCLISelection` before resolving credentials.
 
-See also: `docs/providers.md`, `docs/refresh-loop.md`, `docs/ui.md`.
+## Billing cost semantics (path forward, snapshot 2026-11-06)
+
+- Cost-based providers distinguish three states — a measured amount, a measured zero, and unavailable — and a
+  retained older measurement keeps its original timestamp instead of posing as fresh. Unavailable data never renders
+  as a measured zero; Cost Explorer current-month data lags roughly 24 hours (longer in practice), so unavailable is a
+  normal transient state, not an error ([issue 4846](https://github.com/steipete/CodexBar/issues/4846)).
+- AWS Cost Explorer spend keeps gross usage, credit/adjustment rows, and net billed cost separate instead of reporting
+  only the net sum: a fully credit-covered month stays a measured zero on the net axis while gross usage remains
+  visible, and the configured budget declares whether it tracks gross or net.
+- Grouping uses `SERVICE` plus `RECORD_TYPE`, which exactly fills the API's two-group limit. Record types beyond
+  `Usage` and `Credit` — `Refund`, `Tax`, `DiscountedUsage`, `SavingsPlanCoveredUsage` — fold into the
+  adjustment side rather than being dropped; the daily parser must not drop nonpositive rows when this lands.
+- `NetUnblendedCost` was evaluated and is not the basis: it nets negotiated discounts together with credits, is only
+  populated for accounts with net-cost reporting enabled, and cannot separate credits from discounts. Adding a
+  grouping dimension does not add an independent billed query, though more groups can add pagination pages
+  ($0.01 per request).
+
+See also: `docs/providers.md`, `docs/refresh-loop.md`, `docs/ui.md`, `docs/bedrock.md`.

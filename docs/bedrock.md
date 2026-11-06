@@ -107,7 +107,8 @@ tracking continue unchanged.
 
 - Shows month-to-date Bedrock spend.
 - Cost Explorer's `DataUnavailableException` reports **Spend unavailable** for monthly spend and daily history; it is not a measured zero. A successful response reporting zero cost remains zero, including when AWS credits cover the net charge. Gross usage and credit adjustments are not shown separately.
-- Daily history retains explicitly measured zero-cost billing days, including their dates and service breakdowns; missing or unparseable rows do not create zero-cost entries.
+- Path forward ([issue 4846](https://github.com/steipete/CodexBar/issues/4846), snapshot 2026-11-06): group the Cost Explorer request by `SERVICE` and `RECORD_TYPE` and surface gross usage, credits/adjustments, and net billed cost separately, so a credit-covered net $0.00 is distinguishable from no usage. The monthly budget will state whether it tracks gross or net (open product decision). Record types beyond `Usage` and `Credit` — `Refund`, `Tax`, `DiscountedUsage`, `SavingsPlanCoveredUsage` — fold into the adjustment side; `NetUnblendedCost` was evaluated and rejected as the basis because it is only populated for accounts with net-cost reporting enabled and cannot separate credits from negotiated discounts. Cost Explorer current-month data lags roughly 24 hours, so **Spend unavailable** early in a month is expected, and any retained older measurement keeps its original timestamp.
+- Daily history retains explicitly measured zero-cost billing days, including their dates and service breakdowns; missing or unparseable rows do not create zero-cost entries. When the gross/net split lands, the daily parser must retain nonpositive credit rows instead of dropping them.
 - Shows budget progress when a budget is configured.
 - Shows rolling 14-day Claude tokens and requests when CloudWatch access is available.
 - Reuses the shared inline dashboard for daily cost history when enough buckets are available.
